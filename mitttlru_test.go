@@ -2,10 +2,11 @@ package mitlru
 
 import (
 	"testing"
+	"time"
 )
 
-func TestLRU(t *testing.T) {
-	lru := NewLRUCache(5)
+func TestTTLRU(t *testing.T) {
+	lru := NewTTLRUCache(5, 2*time.Second)
 
 	lru.Add("key0", "val")
 	lru.Add("key1", "val")
@@ -80,5 +81,28 @@ func TestLRU(t *testing.T) {
 
 	if lru.Capacity() != 5 {
 		t.Error("Should hold 5")
+	}
+
+	lru.Add("key7", "val")
+	if lru.Len() != 1 {
+		t.Error("Should contain 1")
+	}
+
+	time.Sleep(1 * time.Second)
+
+	lru.Add("key8", "val")
+
+	if lru.Len() != 2 {
+		t.Error("Should contain 2")
+	}
+
+	time.Sleep(2 * time.Second)
+	if lru.Len() >= 2 {
+		t.Error("Should contain < 2")
+	}
+
+	time.Sleep(1 * time.Second)
+	if lru.Len() != 0 {
+		t.Error("Should contain 0")
 	}
 }

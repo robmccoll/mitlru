@@ -93,7 +93,5 @@ func (lru *LRUCache) Len() int {
 
 // Capacity returns the capacity of the cache
 func (lru *LRUCache) Capacity() int {
-	lru.lock.RLock()
-	defer lru.lock.RUnlock()
 	return lru.capacity
 }
