@@ -69,9 +69,23 @@ func (lru *TTLRUCache) Purge() {
 	lru.timeorder = list.New()
 }
 
-// Add stores a key value par in the cache. If the key was already present,
+// Add stores a key value pair in the cache. If the key was already present,
 // it is moved to the front
 func (lru *TTLRUCache) Add(key, val interface{}) {
+	lru.AddWithExpire(key, val, time.Now().Add(lru.ttl))
+}
+
+// AddWithTTL stores a key value pair in the cache. If the key was already present,
+// it is moved to the front.  Additionally, the given TTL is used (overriding the
+// default ttl).
+func (lru *TTLRUCache) AddWithTTL(key, val interface{}, ttl time.Duration) {
+	lru.AddWithExpire(key, val, time.Now().Add(ttl))
+}
+
+// AddWithExpire stores a key value pair in the cache. If the key was already present,
+// it is moved to the front.  Additionally, the given expiration time is used (overriding the
+// default ttl).
+func (lru *TTLRUCache) AddWithExpire(key, val interface{}, expiration time.Time) {
 	lru.lock.Lock()
 	defer lru.lock.Unlock()
 
@@ -79,11 +93,11 @@ func (lru *TTLRUCache) Add(key, val interface{}) {
 		etriple.val = val
 		lru.order.MoveToFront(etriple.orderelement)
 		lru.timeorder.MoveToBack(etriple.timeelement)
-		etriple.expiration = time.Now().Add(lru.ttl)
+		etriple.expiration = expiration
 		return
 	}
 
-	etriple := &triple{key, val, time.Now().Add(lru.ttl), nil, nil}
+	etriple := &triple{key, val, expiration, nil, nil}
 	lru.mapping[key] = etriple
 	etriple.orderelement = lru.order.PushFront(etriple)
 	etriple.timeelement = lru.timeorder.PushBack(etriple)
