@@ -10,12 +10,13 @@ import (
 // then begins removing the least recently read/created
 // triples for every new triple beyond insert.
 type TTLRUCache struct {
-	capacity  int
-	mapping   map[interface{}]*triple
-	order     *list.List
-	timeorder *list.List
-	ttl       time.Duration
-	lock      sync.RWMutex
+	capacity   int
+	mapping    map[interface{}]*triple
+	order      *list.List
+	timeorder  *list.List
+	ttl        time.Duration
+	lock       sync.RWMutex
+	triplePool sync.Pool
 }
 
 type triple struct {
@@ -24,6 +25,10 @@ type triple struct {
 	expiration   time.Time
 	timeelement  *list.Element
 	orderelement *list.Element
+}
+
+func newTriple() interface{} {
+	return &triple{}
 }
 
 // NewTTLRUCache returns a cache that starts removing elements after capacity
@@ -36,6 +41,7 @@ func NewTTLRUCache(capacity int, ttl time.Duration) *TTLRUCache {
 		timeorder: list.New(),
 		ttl:       ttl,
 	}
+	rtn.triplePool.New = newTriple
 	go rtn.timer()
 	return rtn
 }
@@ -97,10 +103,13 @@ func (lru *TTLRUCache) AddWithExpire(key, val interface{}, expiration time.Time)
 		return
 	}
 
-	etriple := &triple{key, val, expiration, nil, nil}
-	lru.mapping[key] = etriple
+	etriple := lru.triplePool.Get().(*triple)
+	etriple.key = key
+	etriple.val = val
+	etriple.expiration = expiration
 	etriple.orderelement = lru.order.PushFront(etriple)
 	etriple.timeelement = lru.timeorder.PushBack(etriple)
+	lru.mapping[key] = etriple
 
 	for lru.order.Len() > lru.capacity {
 		element := lru.order.Back()
@@ -108,6 +117,7 @@ func (lru *TTLRUCache) AddWithExpire(key, val interface{}, expiration time.Time)
 		lru.order.Remove(element)
 		lru.timeorder.Remove(etriple.timeelement)
 		delete(lru.mapping, etriple.key)
+		lru.triplePool.Put(etriple)
 	}
 }
 
@@ -133,6 +143,7 @@ func (lru *TTLRUCache) Remove(key interface{}) {
 		lru.order.Remove(element.orderelement)
 		lru.timeorder.Remove(element.timeelement)
 		delete(lru.mapping, element.key)
+		lru.triplePool.Put(element)
 	}
 }
 
