@@ -1,9 +1,10 @@
 package mitlru
 
 import (
-	"container/list"
 	"sync"
 	"time"
+
+	"github.com/robmccoll/mitlru/list"
 )
 
 // TTLRUCache stores up to capacity triples of keys, values, and timestamps,
@@ -23,8 +24,8 @@ type triple struct {
 	key          interface{}
 	val          interface{}
 	expiration   time.Time
-	timeelement  *list.Element
-	orderelement *list.Element
+	timeelement  list.Element
+	orderelement list.Element
 }
 
 func newTriple() interface{} {
@@ -56,9 +57,10 @@ func (lru *TTLRUCache) timer() {
 			if tfront.expiration.After(now) {
 				break
 			}
-			lru.order.Remove(tfront.orderelement)
+			lru.order.Remove(&tfront.orderelement)
 			lru.timeorder.Remove(efront)
 			delete(lru.mapping, tfront.key)
+			lru.triplePool.Put(tfront)
 		}
 		lru.lock.Unlock()
 		time.Sleep(1 * time.Second)
@@ -97,8 +99,8 @@ func (lru *TTLRUCache) AddWithExpire(key, val interface{}, expiration time.Time)
 
 	if etriple, ok := lru.mapping[key]; ok {
 		etriple.val = val
-		lru.order.MoveToFront(etriple.orderelement)
-		lru.timeorder.MoveToBack(etriple.timeelement)
+		lru.order.MoveToFront(&etriple.orderelement)
+		lru.timeorder.MoveToBack(&etriple.timeelement)
 		etriple.expiration = expiration
 		return
 	}
@@ -107,15 +109,17 @@ func (lru *TTLRUCache) AddWithExpire(key, val interface{}, expiration time.Time)
 	etriple.key = key
 	etriple.val = val
 	etriple.expiration = expiration
-	etriple.orderelement = lru.order.PushFront(etriple)
-	etriple.timeelement = lru.timeorder.PushBack(etriple)
+	etriple.orderelement.Value = etriple
+	etriple.timeelement.Value = etriple
+	lru.order.MoveToFront(&etriple.orderelement)
+	lru.timeorder.MoveToBack(&etriple.timeelement)
 	lru.mapping[key] = etriple
 
 	for lru.order.Len() > lru.capacity {
 		element := lru.order.Back()
 		etriple := element.Value.(*triple)
 		lru.order.Remove(element)
-		lru.timeorder.Remove(etriple.timeelement)
+		lru.timeorder.Remove(&etriple.timeelement)
 		delete(lru.mapping, etriple.key)
 		lru.triplePool.Put(etriple)
 	}
@@ -127,7 +131,7 @@ func (lru *TTLRUCache) Get(key interface{}) (value interface{}, foundInCache boo
 	defer lru.lock.Unlock()
 
 	if element, ok := lru.mapping[key]; ok {
-		lru.order.MoveToFront(element.orderelement)
+		lru.order.MoveToFront(&element.orderelement)
 		return element.val, true
 	}
 
@@ -140,8 +144,8 @@ func (lru *TTLRUCache) Remove(key interface{}) {
 	defer lru.lock.Unlock()
 
 	if element, ok := lru.mapping[key]; ok {
-		lru.order.Remove(element.orderelement)
-		lru.timeorder.Remove(element.timeelement)
+		lru.order.Remove(&element.orderelement)
+		lru.timeorder.Remove(&element.timeelement)
 		delete(lru.mapping, element.key)
 		lru.triplePool.Put(element)
 	}
