@@ -107,12 +107,19 @@ func (l *List) insertValue(v interface{}, at *Element) *Element {
 
 // remove removes e from its list, decrements l.len, and returns e.
 func (l *List) remove(e *Element) *Element {
-	e.prev.next = e.next
-	e.next.prev = e.prev
+	if e.prev != nil {
+		e.prev.next = e.next
+	}
+	if e.next != nil {
+		e.next.prev = e.prev
+	}
 	e.next = nil // avoid memory leaks
 	e.prev = nil // avoid memory leaks
+	if e.list == l {
+		l.len--
+	}
+
 	e.list = nil
-	l.len--
 	return e
 }
 
@@ -160,9 +167,8 @@ func (l *List) InsertAfter(v interface{}, mark *Element) *Element {
 }
 
 // MoveToFront moves element e to the front of list l.
-// If e is not an element of l, the list is not modified.
 func (l *List) MoveToFront(e *Element) {
-	if e.list != l || l.root.next == e {
+	if l.root.next == e {
 		return
 	}
 	// see comment in List.Remove about initialization of l
@@ -170,9 +176,8 @@ func (l *List) MoveToFront(e *Element) {
 }
 
 // MoveToBack moves element e to the back of list l.
-// If e is not an element of l, the list is not modified.
 func (l *List) MoveToBack(e *Element) {
-	if e.list != l || l.root.prev == e {
+	if l.root.prev == e {
 		return
 	}
 	// see comment in List.Remove about initialization of l
@@ -180,18 +185,18 @@ func (l *List) MoveToBack(e *Element) {
 }
 
 // MoveBefore moves element e to its new position before mark.
-// If e or mark is not an element of l, or e == mark, the list is not modified.
+// If e == mark, the list is not modified.
 func (l *List) MoveBefore(e, mark *Element) {
-	if e.list != l || e == mark || mark.list != l {
+	if e == mark || mark.list != l {
 		return
 	}
 	l.insert(l.remove(e), mark.prev)
 }
 
 // MoveAfter moves element e to its new position after mark.
-// If e or mark is not an element of l, or e == mark, the list is not modified.
+// If e == mark, the list is not modified.
 func (l *List) MoveAfter(e, mark *Element) {
-	if e.list != l || e == mark || mark.list != l {
+	if e == mark || mark.list != l {
 		return
 	}
 	l.insert(l.remove(e), mark)
