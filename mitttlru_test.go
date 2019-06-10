@@ -106,3 +106,17 @@ func TestTTLRU(t *testing.T) {
 		t.Error("Should contain 0")
 	}
 }
+
+func TestTimeOrdering(t *testing.T) {
+	lru := NewTTLRUCache(5, 3*time.Second)
+
+	lru.Add("key0", "valid for 3 seconds")
+	lru.Add("key1", "valid for 3 seconds")
+	lru.AddWithTTL("key2", "valid for 1 second", 1*time.Second)
+
+	time.Sleep(2 * time.Second)
+
+	if _, b := lru.Get("key2"); b {
+		t.Error("Should not contain key2")
+	}
+}

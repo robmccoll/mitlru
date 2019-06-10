@@ -85,14 +85,16 @@ func (lru *TTLRUCache) Add(key, val interface{}) {
 
 // AddWithTTL stores a key value pair in the cache. If the key was already present,
 // it is moved to the front.  Additionally, the given TTL is used (overriding the
-// default ttl).
+// default ttl). NOTE: O(N) worst case! It is assumed that entires will mostly
+// arrive in expiration order - they are kept in a doubly linked list.
 func (lru *TTLRUCache) AddWithTTL(key, val interface{}, ttl time.Duration) {
 	lru.AddWithExpire(key, val, time.Now().Add(ttl))
 }
 
 // AddWithExpire stores a key value pair in the cache. If the key was already present,
 // it is moved to the front.  Additionally, the given expiration time is used (overriding the
-// default ttl).
+// default ttl). NOTE: O(N) worst case! It is assumed that entires will mostly arrive
+// in expiration order - they are kept in a doubly linked list.
 func (lru *TTLRUCache) AddWithExpire(key, val interface{}, expiration time.Time) {
 	lru.lock.Lock()
 	defer lru.lock.Unlock()
@@ -112,7 +114,21 @@ func (lru *TTLRUCache) AddWithExpire(key, val interface{}, expiration time.Time)
 	etriple.orderelement.Value = etriple
 	etriple.timeelement.Value = etriple
 	lru.order.MoveToFront(&etriple.orderelement)
-	lru.timeorder.MoveToBack(&etriple.timeelement)
+
+	if lru.timeorder.Len() == 0 {
+		lru.timeorder.MoveToBack(&etriple.timeelement)
+	} else {
+		ecur := lru.timeorder.Back()
+		for ecur != nil && ecur.Value.(*triple).expiration.After(expiration) {
+			ecur = ecur.Value.(*triple).timeelement.Prev()
+		}
+		if ecur == nil {
+			lru.timeorder.MoveToFront(&etriple.timeelement)
+		} else {
+			lru.timeorder.MoveAfter(&etriple.timeelement, &ecur.Value.(*triple).timeelement)
+		}
+	}
+
 	lru.mapping[key] = etriple
 
 	for lru.order.Len() > lru.capacity {
